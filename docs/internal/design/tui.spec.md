@@ -363,6 +363,31 @@ These work on every screen:
 
 Column sorting uses k9s's Shift-key convention. Additional sort keys are defined per view where meaningful.
 
+### Help Overlay
+
+Pressing `?` opens a full-screen help overlay showing keyboard shortcuts organized into three columns: **Resource**, **General**, and **Navigation**. The help content changes per-view — only shortcuts valid for the current view are shown.
+
+Example (agents view):
+```
+┌──────────────────────────────── Help(agents) ────────────────────────────────┐
+│                                                                               │
+│  Resource              General              Navigation                        │
+│  ─────────             ───────              ──────────                        │
+│  <s>       Start       <:>   Command        <Enter> Drill into sessions      │
+│  <x>       Stop        </>   Filter         <Esc>   Back to projects         │
+│  <e>       Edit        <?>   Help           <q>     Back / Quit              │
+│  <i>       Inbox       <c>   Copy ID        <0-9>   Switch project           │
+│  <l>       Logs        <N>   Sort by name                                    │
+│  <d>       Describe    <A>   Sort by age                                     │
+│  <n>       New                                                                │
+│  <Ctrl-D>  Delete                                                            │
+│                                                                               │
+│                        Press Esc or ? to close                                │
+└──────────────────────────────────────────────────────────────────────────────┘
+```
+
+The help overlay replaces the table content area. Pressing `Esc` or `?` again closes it and returns to the previous view.
+
 ---
 
 ## Screen Layout
