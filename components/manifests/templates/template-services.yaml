@@ -692,6 +692,7 @@ objects:
           - --openshift-delegate-urls={"/":{"resource":"projects","verb":"list"}}
           - --upstream-timeout=5m
           - --skip-auth-regex=^/metrics
+          - --openshift-ca=/var/run/secrets/kubernetes.io/serviceaccount/ca.crt
           image: ${OAUTH_PROXY_IMAGE_NAME}:${OAUTH_PROXY_IMAGE_TAG}
           imagePullPolicy: IfNotPresent
           livenessProbe:
