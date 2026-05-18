@@ -1,0 +1,480 @@
+apiVersion: template.openshift.io/v1
+kind: Template
+metadata:
+  name: ambient-code-keycloak
+  annotations:
+    description: >-
+      Ambient Code Platform - Keycloak Identity Provider.
+      Deploys a Keycloak instance with PostgreSQL persistence that brokers
+      authentication to Red Hat SSO (auth.redhat.com/auth/realms/EmployeeIDP).
+      Secrets should be provided via vault-mounted secrets in the namespace.
+parameters:
+- name: NAMESPACE
+  description: Namespace for Keycloak deployment
+  value: ambient-keycloak
+- name: KEYCLOAK_IMAGE
+  description: Keycloak container image
+  value: quay.io/keycloak/keycloak:26.0
+- name: POSTGRESQL_IMAGE
+  description: PostgreSQL container image
+  value: registry.redhat.io/rhel10/postgresql-16:10.1
+- name: KEYCLOAK_HOSTNAME
+  description: Public FQDN for Keycloak (https://...)
+  required: true
+- name: FRONTEND_REDIRECT_URIS
+  description: >-
+    Comma-separated list of allowed redirect URIs for the ambient-frontend client.
+    Use wildcard patterns (e.g., https://ambient.corp.stage.redhat.com/*)
+  value: "https://ambient.corp.stage.redhat.com/*"
+- name: RHSSO_BROKER_CLIENT_ID
+  description: Client ID registered at auth.redhat.com for identity brokering
+  value: ambient-code
+- name: POSTGRESQL_STORAGE_SIZE
+  description: PVC size for Keycloak PostgreSQL
+  value: 1Gi
+objects:
+#
+# --- PostgreSQL for Keycloak ---
+#
+- apiVersion: v1
+  kind: PersistentVolumeClaim
+  metadata:
+    name: keycloak-db-data
+    namespace: ${NAMESPACE}
+    labels:
+      app: keycloak-db
+  spec:
+    accessModes:
+    - ReadWriteOnce
+    resources:
+      requests:
+        storage: ${POSTGRESQL_STORAGE_SIZE}
+- apiVersion: apps/v1
+  kind: Deployment
+  metadata:
+    name: keycloak-db
+    namespace: ${NAMESPACE}
+    labels:
+      app: keycloak-db
+  spec:
+    replicas: 1
+    strategy:
+      type: Recreate
+    selector:
+      matchLabels:
+        app: keycloak-db
+    template:
+      metadata:
+        labels:
+          app: keycloak-db
+      spec:
+        securityContext:
+          runAsNonRoot: true
+        containers:
+        - name: postgresql
+          image: ${POSTGRESQL_IMAGE}
+          env:
+          - name: POSTGRESQL_USER
+            valueFrom:
+              secretKeyRef:
+                name: keycloak-db
+                key: db.user
+          - name: POSTGRESQL_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: keycloak-db
+                key: db.password
+          - name: POSTGRESQL_DATABASE
+            valueFrom:
+              secretKeyRef:
+                name: keycloak-db
+                key: db.name
+          ports:
+          - containerPort: 5432
+            name: postgresql
+            protocol: TCP
+          volumeMounts:
+          - name: data
+            mountPath: /var/lib/pgsql/data
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+          readinessProbe:
+            exec:
+              command:
+              - /usr/libexec/check-container
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            exec:
+              command:
+              - /usr/libexec/check-container
+              - --live
+            initialDelaySeconds: 30
+            periodSeconds: 15
+        volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: keycloak-db-data
+- apiVersion: v1
+  kind: Service
+  metadata:
+    name: keycloak-db
+    namespace: ${NAMESPACE}
+    labels:
+      app: keycloak-db
+  spec:
+    type: ClusterIP
+    selector:
+      app: keycloak-db
+    ports:
+    - port: 5432
+      targetPort: 5432
+      protocol: TCP
+      name: postgresql
+#
+# --- Keycloak ---
+#
+- apiVersion: apps/v1
+  kind: Deployment
+  metadata:
+    name: keycloak
+    namespace: ${NAMESPACE}
+    labels:
+      app: keycloak
+  spec:
+    replicas: 1
+    selector:
+      matchLabels:
+        app: keycloak
+    template:
+      metadata:
+        labels:
+          app: keycloak
+      spec:
+        securityContext:
+          runAsNonRoot: true
+        containers:
+        - name: keycloak
+          image: ${KEYCLOAK_IMAGE}
+          args:
+          - start
+          - --import-realm
+          - --optimized=false
+          env:
+          - name: KC_HOSTNAME
+            value: ${KEYCLOAK_HOSTNAME}
+          - name: KC_PROXY_HEADERS
+            value: xforwarded
+          - name: KC_HOSTNAME_BACKCHANNEL_DYNAMIC
+            value: "true"
+          - name: KC_HTTP_ENABLED
+            value: "true"
+          - name: KC_DB
+            value: postgres
+          - name: KC_DB_URL_HOST
+            value: keycloak-db
+          - name: KC_DB_URL_PORT
+            value: "5432"
+          - name: KC_DB_URL_DATABASE
+            valueFrom:
+              secretKeyRef:
+                name: keycloak-db
+                key: db.name
+          - name: KC_DB_USERNAME
+            valueFrom:
+              secretKeyRef:
+                name: keycloak-db
+                key: db.user
+          - name: KC_DB_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: keycloak-db
+                key: db.password
+          - name: KEYCLOAK_ADMIN
+            valueFrom:
+              secretKeyRef:
+                name: keycloak-admin
+                key: username
+          - name: KEYCLOAK_ADMIN_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: keycloak-admin
+                key: password
+          # Env vars for realm JSON placeholder substitution
+          - name: RHSSO_BROKER_CLIENT_SECRET
+            valueFrom:
+              secretKeyRef:
+                name: keycloak-broker-credentials
+                key: client-secret
+          - name: AMBIENT_FRONTEND_CLIENT_SECRET
+            valueFrom:
+              secretKeyRef:
+                name: keycloak-client-credentials
+                key: ambient-frontend-secret
+          - name: JAVA_OPTS_APPEND
+            value: -Dkeycloak.migration.replace-placeholders=true
+          ports:
+          - containerPort: 8080
+            name: http
+            protocol: TCP
+          volumeMounts:
+          - name: realm-config
+            mountPath: /opt/keycloak/data/import
+            readOnly: true
+          resources:
+            requests:
+              cpu: 200m
+              memory: 768Mi
+            limits:
+              cpu: "2"
+              memory: 2Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+          readinessProbe:
+            httpGet:
+              path: /realms/ambient-code
+              port: 8080
+            initialDelaySeconds: 60
+            periodSeconds: 10
+            failureThreshold: 10
+          livenessProbe:
+            httpGet:
+              path: /realms/ambient-code
+              port: 8080
+            initialDelaySeconds: 120
+            periodSeconds: 30
+            failureThreshold: 5
+        volumes:
+        - name: realm-config
+          configMap:
+            name: keycloak-realm-config
+- apiVersion: v1
+  kind: Service
+  metadata:
+    name: keycloak-service
+    namespace: ${NAMESPACE}
+    labels:
+      app: keycloak
+  spec:
+    type: ClusterIP
+    selector:
+      app: keycloak
+    ports:
+    - port: 8080
+      targetPort: 8080
+      protocol: TCP
+      name: http
+- apiVersion: route.openshift.io/v1
+  kind: Route
+  metadata:
+    name: keycloak
+    namespace: ${NAMESPACE}
+    labels:
+      app: keycloak
+  spec:
+    to:
+      kind: Service
+      name: keycloak-service
+      weight: 100
+    port:
+      targetPort: http
+    tls:
+      termination: edge
+      insecureEdgeTerminationPolicy: Redirect
+    wildcardPolicy: None
+#
+# --- Realm Configuration ---
+# Secrets are injected via env var placeholder substitution
+# (JAVA_OPTS_APPEND=-Dkeycloak.migration.replace-placeholders=true)
+#
+# Required vault-mounted secrets in this namespace:
+#   keycloak-admin:              username, password
+#   keycloak-db:                 db.user, db.password, db.name
+#   keycloak-broker-credentials: client-secret (RH SSO broker client secret)
+#   keycloak-client-credentials: ambient-frontend-secret
+#
+- apiVersion: v1
+  kind: ConfigMap
+  metadata:
+    name: keycloak-realm-config
+    namespace: ${NAMESPACE}
+  data:
+    ambient-code-realm.json: |
+      {
+        "realm": "ambient-code",
+        "enabled": true,
+        "sslRequired": "external",
+        "registrationAllowed": false,
+        "accessTokenLifespan": 300,
+        "ssoSessionMaxLifespan": 1800,
+        "clients": [
+          {
+            "clientId": "ambient-frontend",
+            "enabled": true,
+            "protocol": "openid-connect",
+            "publicClient": false,
+            "secret": "${AMBIENT_FRONTEND_CLIENT_SECRET}",
+            "redirectUris": [
+              "${FRONTEND_REDIRECT_URIS}"
+            ],
+            "attributes": {
+              "post.logout.redirect.uris": "${FRONTEND_REDIRECT_URIS}"
+            },
+            "webOrigins": ["+"],
+            "standardFlowEnabled": true,
+            "directAccessGrantsEnabled": false,
+            "serviceAccountsEnabled": false,
+            "fullScopeAllowed": true,
+            "defaultClientScopes": ["openid", "email", "profile"],
+            "protocolMappers": [
+              {
+                "name": "audience",
+                "protocol": "openid-connect",
+                "protocolMapper": "oidc-audience-mapper",
+                "consentRequired": false,
+                "config": {
+                  "included.client.audience": "ambient-frontend",
+                  "id.token.claim": "false",
+                  "access.token.claim": "true",
+                  "introspection.token.claim": "true"
+                }
+              },
+              {
+                "name": "sub",
+                "protocol": "openid-connect",
+                "protocolMapper": "oidc-sub-mapper",
+                "consentRequired": false,
+                "config": {
+                  "access.token.claim": "true",
+                  "introspection.token.claim": "true"
+                }
+              },
+              {
+                "name": "email",
+                "protocol": "openid-connect",
+                "protocolMapper": "oidc-usermodel-attribute-mapper",
+                "consentRequired": false,
+                "config": {
+                  "user.attribute": "email",
+                  "claim.name": "email",
+                  "jsonType.label": "String",
+                  "id.token.claim": "true",
+                  "access.token.claim": "true",
+                  "userinfo.token.claim": "true",
+                  "introspection.token.claim": "true"
+                }
+              },
+              {
+                "name": "preferred_username",
+                "protocol": "openid-connect",
+                "protocolMapper": "oidc-usermodel-attribute-mapper",
+                "consentRequired": false,
+                "config": {
+                  "user.attribute": "username",
+                  "claim.name": "preferred_username",
+                  "jsonType.label": "String",
+                  "id.token.claim": "true",
+                  "access.token.claim": "true",
+                  "userinfo.token.claim": "true",
+                  "introspection.token.claim": "true"
+                }
+              }
+            ]
+          },
+          {
+            "clientId": "ambient-cli",
+            "enabled": true,
+            "protocol": "openid-connect",
+            "publicClient": true,
+            "redirectUris": [
+              "http://localhost:*/callback",
+              "http://127.0.0.1:*/callback"
+            ],
+            "standardFlowEnabled": true,
+            "directAccessGrantsEnabled": false,
+            "defaultClientScopes": ["openid", "email", "profile"]
+          }
+        ],
+        "identityProviders": [
+          {
+            "alias": "redhat-sso",
+            "displayName": "Red Hat SSO",
+            "providerId": "oidc",
+            "enabled": true,
+            "trustEmail": true,
+            "storeToken": false,
+            "firstBrokerLoginFlowAlias": "first broker login",
+            "config": {
+              "clientId": "${RHSSO_BROKER_CLIENT_ID}",
+              "clientSecret": "${RHSSO_BROKER_CLIENT_SECRET}",
+              "authorizationUrl": "https://auth.redhat.com/auth/realms/EmployeeIDP/protocol/openid-connect/auth",
+              "tokenUrl": "https://auth.redhat.com/auth/realms/EmployeeIDP/protocol/openid-connect/token",
+              "userInfoUrl": "https://auth.redhat.com/auth/realms/EmployeeIDP/protocol/openid-connect/userinfo",
+              "jwksUrl": "https://auth.redhat.com/auth/realms/EmployeeIDP/protocol/openid-connect/certs",
+              "issuer": "https://auth.redhat.com/auth/realms/EmployeeIDP",
+              "defaultScope": "openid email profile",
+              "syncMode": "FORCE",
+              "useJwksUrl": "true",
+              "validateSignature": "true",
+              "pkceEnabled": "true",
+              "pkceMethod": "S256",
+              "isAccessTokenJWT": "true",
+              "forwardParameters": ""
+            }
+          }
+        ],
+        "identityProviderMappers": [
+          {
+            "name": "email",
+            "identityProviderAlias": "redhat-sso",
+            "identityProviderMapper": "oidc-user-attribute-idp-mapper",
+            "config": {
+              "claim": "email",
+              "user.attribute": "email",
+              "syncMode": "FORCE"
+            }
+          },
+          {
+            "name": "first-name",
+            "identityProviderAlias": "redhat-sso",
+            "identityProviderMapper": "oidc-user-attribute-idp-mapper",
+            "config": {
+              "claim": "given_name",
+              "user.attribute": "firstName",
+              "syncMode": "FORCE"
+            }
+          },
+          {
+            "name": "last-name",
+            "identityProviderAlias": "redhat-sso",
+            "identityProviderMapper": "oidc-user-attribute-idp-mapper",
+            "config": {
+              "claim": "family_name",
+              "user.attribute": "lastName",
+              "syncMode": "FORCE"
+            }
+          },
+          {
+            "name": "username",
+            "identityProviderAlias": "redhat-sso",
+            "identityProviderMapper": "oidc-username-idp-mapper",
+            "config": {
+              "template": "${CLAIM.preferred_username}",
+              "syncMode": "FORCE"
+            }
+          }
+        ]
+      }
