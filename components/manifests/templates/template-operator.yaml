@@ -1192,6 +1192,9 @@ objects:
   - kind: ServiceAccount
     name: agentic-operator
     namespace: ambient-code
+  - kind: ServiceAccount
+    name: agentic-operator
+    namespace: jsell-ambient-sso-poc
 - apiVersion: rbac.authorization.k8s.io/v1
   kind: ClusterRoleBinding
   metadata:
@@ -1204,6 +1207,9 @@ objects:
   - kind: ServiceAccount
     name: frontend
     namespace: ambient-code
+  - kind: ServiceAccount
+    name: frontend
+    namespace: jsell-ambient-sso-poc
 - apiVersion: rbac.authorization.k8s.io/v1
   kind: ClusterRoleBinding
   metadata:
@@ -1228,6 +1234,9 @@ objects:
   - kind: ServiceAccount
     name: backend-api
     namespace: ambient-code
+  - kind: ServiceAccount
+    name: backend-api
+    namespace: jsell-ambient-sso-poc
 - apiVersion: v1
   data:
     agent-registry.json: "[\n  {\n    \"id\": \"claude-agent-sdk\",\n    \"displayName\": \"Claude Code\",\n    \"description\": \"Anthropic Claude with full coding capabilities\",\n    \"framework\": \"claude-agent-sdk\",\n    \"provider\": \"anthropic\",\n    \"container\": {\n      \"image\": \"quay.io/ambient_code/vteam_claude_runner:latest\",\n      \"port\": 8001,\n      \"env\": {\n        \"RUNNER_TYPE\": \"claude-agent-sdk\",\n        \"RUNNER_STATE_DIR\": \".claude\"\n      },\n      \"resources\": {\n        \"requests\": {\"cpu\": \"500m\", \"memory\": \"512Mi\"},\n        \"limits\": {\"cpu\": \"2\", \"memory\": \"8Gi\"}\n      }\n    },\n    \"sandbox\": {\n      \"stateDir\": \".claude\",\n      \"stateSyncImage\": \"quay.io/ambient_code/vteam_state_sync:latest\",\n      \"persistence\": \"s3\",\n      \"workspaceSize\": \"10Gi\",\n      \"terminationGracePeriod\": 60,\n      \"seed\": {\"cloneRepos\": true, \"hydrateState\": true}\n    },\n    \"auth\": {\n      \"requiredSecretKeys\": [\"ANTHROPIC_API_KEY\"],\n      \"secretKeyLogic\": \"any\",\n      \"vertexSupported\": true\n    },\n    \"featureGate\": \"\"\n  },\n  {\n    \"id\": \"gemini-cli\",\n    \"displayName\": \"Gemini CLI\",\n    \"description\": \"Google Gemini coding agent with built-in file, bash, and search tools\",\n    \"framework\": \"gemini-cli\",\n    \"provider\": \"google\",\n    \"container\": {\n      \"image\": \"quay.io/ambient_code/vteam_claude_runner:latest\",\n      \"port\": 8001,\n      \"env\": {\n        \"RUNNER_TYPE\": \"gemini-cli\",\n        \"RUNNER_STATE_DIR\": \".gemini\"\n      }\n    },\n    \"sandbox\": {\n      \"stateDir\": \".gemini\",\n      \"stateSyncImage\": \"quay.io/ambient_code/vteam_state_sync:latest\",\n      \"persistence\": \"s3\",\n      \"workspaceSize\": \"10Gi\",\n      \"terminationGracePeriod\": 60,\n      \"seed\": {\"cloneRepos\": true, \"hydrateState\": true}\n    },\n    \"auth\": {\n      \"requiredSecretKeys\": [\"GEMINI_API_KEY\", \"GOOGLE_API_KEY\"],\n      \"secretKeyLogic\": \"any\",\n      \"vertexSupported\": true\n    },\n    \"featureGate\": \"runner.gemini-cli.enabled\"\n  }\n]\n"
