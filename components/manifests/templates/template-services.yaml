@@ -24,6 +24,9 @@ parameters:
   value: ambient-code
 - name: UPSTREAM_TIMEOUT
   value: 5m
+- name: SSO_ENABLED
+  description: Enable SSO authentication via Keycloak (disables OAuth proxy auth path)
+  value: "false"
 objects:
 - apiVersion: v1
   kind: Namespace
@@ -546,6 +549,26 @@ objects:
                 key: unleash-environment
                 name: unleash-credentials
                 optional: true
+          - name: SSO_ENABLED
+            value: ${SSO_ENABLED}
+          - name: SSO_ISSUER_URL
+            valueFrom:
+              secretKeyRef:
+                key: SSO_ISSUER_URL
+                name: sso-credentials
+                optional: true
+          - name: SSO_AUDIENCE
+            valueFrom:
+              secretKeyRef:
+                key: SSO_AUDIENCE
+                name: sso-credentials
+                optional: true
+          - name: SSO_PUBLIC_ISSUER_URL
+            valueFrom:
+              secretKeyRef:
+                key: SSO_FRONTEND_ISSUER_URL
+                name: sso-credentials
+                optional: true
           image: ${IMAGE_BACKEND}:${IMAGE_TAG}
           imagePullPolicy: Always
           livenessProbe:
@@ -649,6 +672,46 @@ objects:
               secretKeyRef:
                 key: client-api-token
                 name: unleash-credentials
+                optional: true
+          - name: SSO_ENABLED
+            value: ${SSO_ENABLED}
+          - name: NEXT_PUBLIC_SSO_ENABLED
+            value: ${SSO_ENABLED}
+          - name: SSO_ISSUER_URL
+            valueFrom:
+              secretKeyRef:
+                key: SSO_ISSUER_URL
+                name: sso-credentials
+                optional: true
+          - name: SSO_CLIENT_ID
+            valueFrom:
+              secretKeyRef:
+                key: SSO_CLIENT_ID
+                name: sso-credentials
+                optional: true
+          - name: SSO_CLIENT_SECRET
+            valueFrom:
+              secretKeyRef:
+                key: SSO_CLIENT_SECRET
+                name: sso-credentials
+                optional: true
+          - name: SESSION_SECRET
+            valueFrom:
+              secretKeyRef:
+                key: SESSION_SECRET
+                name: sso-credentials
+                optional: true
+          - name: SSO_REDIRECT_URI
+            valueFrom:
+              secretKeyRef:
+                key: SSO_REDIRECT_URI
+                name: sso-credentials
+                optional: true
+          - name: SSO_PUBLIC_ISSUER_URL
+            valueFrom:
+              secretKeyRef:
+                key: SSO_FRONTEND_ISSUER_URL
+                name: sso-credentials
                 optional: true
           image: ${IMAGE_FRONTEND}:${IMAGE_TAG}
           imagePullPolicy: Always
