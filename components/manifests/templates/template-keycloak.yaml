@@ -6,7 +6,7 @@ metadata:
     description: >-
       Ambient Code Platform - Keycloak Identity Provider.
       Deploys a Keycloak instance with PostgreSQL persistence that brokers
-      authentication to Red Hat SSO (auth.redhat.com/auth/realms/EmployeeIDP).
+      authentication to Red Hat SSO (auth.stage.redhat.com/auth/realms/EmployeeIDP).
       Secrets should be provided via vault-mounted secrets in the namespace.
 parameters:
 - name: NAMESPACE
@@ -27,7 +27,7 @@ parameters:
     Use wildcard patterns (e.g., https://ambient.corp.stage.redhat.com/*)
   value: "https://ambient.corp.stage.redhat.com/*"
 - name: RHSSO_BROKER_CLIENT_ID
-  description: Client ID registered at auth.redhat.com for identity brokering
+  description: Client ID registered at auth.stage.redhat.com for identity brokering
   value: ambient-code
 - name: POSTGRESQL_STORAGE_SIZE
   description: PVC size for Keycloak PostgreSQL
@@ -420,11 +420,11 @@ objects:
             "config": {
               "clientId": "${RHSSO_BROKER_CLIENT_ID}",
               "clientSecret": "${RHSSO_BROKER_CLIENT_SECRET}",
-              "authorizationUrl": "https://auth.redhat.com/auth/realms/EmployeeIDP/protocol/openid-connect/auth",
-              "tokenUrl": "https://auth.redhat.com/auth/realms/EmployeeIDP/protocol/openid-connect/token",
-              "userInfoUrl": "https://auth.redhat.com/auth/realms/EmployeeIDP/protocol/openid-connect/userinfo",
-              "jwksUrl": "https://auth.redhat.com/auth/realms/EmployeeIDP/protocol/openid-connect/certs",
-              "issuer": "https://auth.redhat.com/auth/realms/EmployeeIDP",
+              "authorizationUrl": "https://auth.stage.redhat.com/auth/realms/EmployeeIDP/protocol/openid-connect/auth",
+              "tokenUrl": "https://auth.stage.redhat.com/auth/realms/EmployeeIDP/protocol/openid-connect/token",
+              "userInfoUrl": "https://auth.stage.redhat.com/auth/realms/EmployeeIDP/protocol/openid-connect/userinfo",
+              "jwksUrl": "https://auth.stage.redhat.com/auth/realms/EmployeeIDP/protocol/openid-connect/certs",
+              "issuer": "https://auth.stage.redhat.com/auth/realms/EmployeeIDP",
               "defaultScope": "openid email profile",
               "syncMode": "FORCE",
               "useJwksUrl": "true",
